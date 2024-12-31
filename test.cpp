@@ -110,6 +110,7 @@ public:
         }
         return k2Score;
     }
+
 };
 
 // Function to split a string by a delimiter
@@ -158,24 +159,24 @@ vector<vector<int>> read_data(string filePath) {
 int main() {
     DAG dag;
 
-    // dag.addEdge(2, 0);
-    // dag.addEdge(5, 2);
-    // dag.addEdge(3, 1);
-    // dag.addEdge(4, 1);
-    // dag.addEdge(5, 3);
-    // dag.addEdge(7, 4);
-    // dag.addEdge(7, 5);
-    // dag.addEdge(6, 5);
-    // Adding edges to the DAG
-    dag.addEdge(1, 2);
+    dag.addEdge(0, 2);
     dag.addEdge(2, 5);
     dag.addEdge(1, 3);
     dag.addEdge(1, 4);
     dag.addEdge(3, 5);
     dag.addEdge(4, 7);
     dag.addEdge(5, 7);
-    dag.addEdge(1, 4);
-    dag.addEdge(1, 7);
+    dag.addEdge(5, 6);
+    // // Adding edges to the DAG
+    // dag.addEdge(1, 2);
+    // dag.addEdge(2, 5);
+    // dag.addEdge(1, 3);
+    // dag.addEdge(1, 4);
+    // dag.addEdge(3, 5);
+    // dag.addEdge(4, 7);
+    // dag.addEdge(5, 7);
+    // dag.addEdge(1, 4);
+    // dag.addEdge(1, 7);
 
     // Check if the DAG is valid
     if (dag.isCyclic()) {

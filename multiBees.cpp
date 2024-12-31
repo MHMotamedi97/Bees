@@ -12,6 +12,9 @@
 #include <limits>
 #include <utility>
 #include <chrono>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 using namespace std;
 // Define types for clarity
@@ -73,6 +76,13 @@ class DAG {
         }
 
         bool addEdge(int u, int v) {
+            // Check if the edge already exists
+            auto& neighbors = adjList[u];
+            if (find(neighbors.begin(), neighbors.end(), v) != neighbors.end()) {
+                cout << "Edge " << u << " -> " << v << " already exists. Not added.\n";
+                return false;
+            }
+
             if (createsCycle(u, v)) {
                 cout << "Edge " << u << " -> " << v << " creates a cycle. Not added.\n";
                 return false;
@@ -301,135 +311,154 @@ vector<vector<int>> read_data(string filePath) {
 
 
 class Bee {
-private:
-    vector<DAG> storedDAGs;
-    vector<double> storedScores;
+    private:
+        vector<DAG> storedDAGs;
+        vector<double> storedScores;
 
-public:
-    Bee() {}
+    public:
+        Bee() {}
 
-    DAG generateRandomDAG(int numNodes, int maxEdges) {
-        DAG randomDAG;
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_int_distribution<> dist(0, numNodes - 1);
+        DAG generateRandomDAG(int numNodes) {
+            DAG randomDAG;
+            random_device rd;
+            mt19937 gen(rd());
+            uniform_int_distribution<> dist(0, numNodes - 1);
+            int maxEdges = numNodes * (numNodes - 1) / 2; // Maximum number of edges in a directed acyclic graph
+            uniform_int_distribution<> edge_dist(0, maxEdges - 1);
+            maxEdges = edge_dist(gen);
+            for (int i = 0; i < maxEdges; ++i) {
+                int parent = dist(gen);
+                int child = dist(gen);
+                if (parent != child) {
+                    randomDAG.addEdge(parent, child);
+                }
+            }
+            return randomDAG;
+        }
 
-        for (int i = 0; i < maxEdges; ++i) {
-            int parent = dist(gen);
-            int child = dist(gen);
+        void performOperations(DAG& dag, const vector<vector<int>>& data, int numValues) {
+            random_device rd;
+            mt19937 gen(rd());
+            uniform_int_distribution<> nodeDist(0, dag.numNodes() - 1);
+
+            // Keep original DAG
+            storedDAGs.push_back(dag);
+            double score = dag.calculateK2Score(data, numValues);
+            storedScores.push_back(score);
+
+            // Randomly add an edge
+            DAG modifiedDAG = dag;
+            int parent = nodeDist(gen);
+            int child = nodeDist(gen);
             if (parent != child) {
-                randomDAG.addEdge(parent, child);
+                modifiedDAG.addEdge(parent, child);
             }
-        }
-        return randomDAG;
-    }
+            storedDAGs.push_back(modifiedDAG);
+            storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
 
-    void performOperations(DAG& dag, const vector<vector<int>>& data, int numValues) {
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_int_distribution<> nodeDist(0, dag.numNodes() - 1);
-
-        // Keep original DAG
-        storedDAGs.push_back(dag);
-        double score = dag.calculateK2Score(data, numValues);
-        storedScores.push_back(score);
-
-        // Randomly add an edge
-        DAG modifiedDAG = dag;
-        int parent = nodeDist(gen);
-        int child = nodeDist(gen);
-        if (parent != child) {
-            modifiedDAG.addEdge(parent, child);
-        }
-        storedDAGs.push_back(modifiedDAG);
-        storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
-
-        // Randomly remove an edge
-        modifiedDAG = dag;
-        auto edges = modifiedDAG.getEdges();
-        if (!edges.empty()) {
-            uniform_int_distribution<> edgeDist(0, edges.size() - 1);
-            auto edge = edges[edgeDist(gen)];
-            modifiedDAG.removeEdge(edge.first, edge.second);
-        }
-        storedDAGs.push_back(modifiedDAG);
-        storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
-
-        // Randomly reverse an edge
-        modifiedDAG = dag;
-        edges = modifiedDAG.getEdges();
-        if (!edges.empty()) {
-            uniform_int_distribution<> edgeDist(0, edges.size() - 1);
-            auto edge = edges[edgeDist(gen)];
-            modifiedDAG.reverseEdge(edge.first, edge.second);
-        }
-        storedDAGs.push_back(modifiedDAG);
-        storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
-
-        // Randomly move an edge
-        modifiedDAG = dag;
-        edges = modifiedDAG.getEdges();
-        if (!edges.empty()) {
-            uniform_int_distribution<> edgeDist(0, edges.size() - 1);
-            auto edge = edges[edgeDist(gen)];
-            int newParent = nodeDist(gen);
-            int newChild = nodeDist(gen);
-            if (newParent != newChild) {
+            // Randomly remove an edge
+            modifiedDAG = dag;
+            auto edges = modifiedDAG.getEdges();
+            if (!edges.empty()) {
+                uniform_int_distribution<> edgeDist(0, edges.size() - 1);
+                auto edge = edges[edgeDist(gen)];
                 modifiedDAG.removeEdge(edge.first, edge.second);
-                modifiedDAG.addEdge(newParent, newChild);
             }
+            storedDAGs.push_back(modifiedDAG);
+            storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
+
+            // Randomly reverse an edge
+            modifiedDAG = dag;
+            edges = modifiedDAG.getEdges();
+            if (!edges.empty()) {
+                uniform_int_distribution<> edgeDist(0, edges.size() - 1);
+                auto edge = edges[edgeDist(gen)];
+                modifiedDAG.reverseEdge(edge.first, edge.second);
+            }
+            storedDAGs.push_back(modifiedDAG);
+            storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
+
+            // Randomly move an edge
+            modifiedDAG = dag;
+            edges = modifiedDAG.getEdges();
+            if (!edges.empty()) {
+                uniform_int_distribution<> edgeDist(0, edges.size() - 1);
+                auto edge = edges[edgeDist(gen)];
+                int newParent = nodeDist(gen);
+                int newChild = nodeDist(gen);
+                if (newParent != newChild) {
+                    modifiedDAG.removeEdge(edge.first, edge.second);
+                    modifiedDAG.addEdge(newParent, newChild);
+                }
+            }
+            storedDAGs.push_back(modifiedDAG);
+            storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
         }
-        storedDAGs.push_back(modifiedDAG);
-        storedScores.push_back(modifiedDAG.calculateK2Score(data, numValues));
-    }
 
-    const vector<DAG>& getStoredDAGs() const {
-        return storedDAGs;
-    }
+        const vector<DAG>& getStoredDAGs() const {
+            return storedDAGs;
+        }
 
-    const vector<double>& getStoredScores() const {
-        return storedScores;
-    }
+        const vector<double>& getStoredScores() const {
+            return storedScores;
+        }
+        DAG getBestDAG() const {
+            if (storedDAGs.empty()) {
+                throw runtime_error("No DAGs stored.");
+            }
+
+            auto maxIt = max_element(storedScores.begin(), storedScores.end());
+            int index = distance(storedScores.begin(), maxIt);
+            return storedDAGs[index];
+        }
 };
 
-int main() {
-    DAG dag;
-    DAG solution;
-    dag.addEdge(0, 2);
-    dag.addEdge(2, 5);
-    dag.addEdge(1, 3);
-    dag.addEdge(1, 4);
-    dag.addEdge(3, 5);
-    dag.addEdge(4, 7);
-    dag.addEdge(5, 7);
-    dag.addEdge(5, 6);
-    // vector<DAG> dags = createRandomDAGs(2, 8, 5);
-    // for (auto& dag: dags) {
-    //     dag.display();
-    // }
-        // Reading dataset from the CSV file
-    string filePath = "asia.csv";
-    vector<vector<int>> data = read_data(filePath);
 
+
+mutex resultMutex; // Mutex to protect shared data
+
+void runBeeTask(Bee& bee, const vector<vector<int>>& data, int numValues, vector<DAG>& globalDAGs, vector<double>& globalScores) {
+    DAG randomDAG = bee.generateRandomDAG(8); // Generate a random DAG with 8 nodes
+    bee.performOperations(randomDAG, data, numValues);
+
+    // Store results in a thread-safe manner
+    lock_guard<mutex> guard(resultMutex);
+    const auto& storedDAGs = bee.getStoredDAGs();
+    const auto& storedScores = bee.getStoredScores();
+    globalDAGs.insert(globalDAGs.end(), storedDAGs.begin(), storedDAGs.end());
+    globalScores.insert(globalScores.end(), storedScores.begin(), storedScores.end());
+}
+
+int main() {
+    // Example DAG and dataset setup
+    string filePath = "asia.csv";
+    vector<vector<int>> data = read_data(filePath); // Load dataset
     int numValues = 2; // Assuming binary variables
 
-    double k2Score = dag.calculateK2Score(data, numValues);
-    cout << "K2 Score of the DAG: " << k2Score << endl;
-    solution = dag;
-    solution.addEdge(0, 1);
-    k2Score = solution.calculateK2Score(data, numValues);
-    cout << "K2 Score of the DAG: " << k2Score << endl;
-    solution = dag;
-    solution.removeEdge(3, 7);
-    k2Score = solution.calculateK2Score(data, numValues);
-    cout << "K2 Score of the DAG: " << k2Score << endl;
-    solution = dag;
-    solution.reverseEdge(4, 7);
-    k2Score = solution.calculateK2Score(data, numValues);
-    cout << "K2 Score of the DAG: " << k2Score << endl;
-    solution = dag;
-    solution.moveEdge(4, 5);
-    k2Score = solution.calculateK2Score(data, numValues);
-    cout << "K2 Score of the DAG: " << k2Score << endl;
+    int numBees = 2; // Number of employed bees (threads)
+    vector<thread> threads;
+    vector<DAG> globalDAGs;
+    vector<double> globalScores;
+
+    for (int i = 0; i < numBees; ++i) {
+        Bee bee;
+        threads.emplace_back(runBeeTask, ref(bee), cref(data), numValues, ref(globalDAGs), ref(globalScores));
+    }
+
+    // Wait for all threads to complete
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    // Find the best DAG from all bees
+    auto maxIt = max_element(globalScores.begin(), globalScores.end());
+    if (maxIt != globalScores.end()) {
+        int index = distance(globalScores.begin(), maxIt);
+        cout << "Best DAG score: " << *maxIt << endl;
+        globalDAGs[index].display();
+    } else {
+        cout << "No DAGs generated." << endl;
+    }
+
     return 0;
 }
