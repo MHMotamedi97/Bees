@@ -3,17 +3,37 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "C:/Program Files (x86)/Microsoft SDKs/MPI/Include"
             ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
+            "defines": [],
+            "windowsSdkVersion": "10.0.19041.0",
+            "compilerPath": "C:/msys64/ucrt64/bin/g++.exe",
             "cStandard": "c17",
-            "cppStandard": "gnu++17",
+            "cppStandard": "c++17",
             "intelliSenseMode": "windows-gcc-x64"
         }
     ],
     "version": 4
 }
+
+// {
+//     "configurations": [
+//         {
+//             "name": "Win32",
+//             "includePath": [
+//                 "${workspaceFolder}/**",
+//                 "C:\Program Files (x86)\Microsoft SDKs\MPI\Include"
+//             ],
+//             "defines": [
+//                 "_DEBUG",
+//                 "UNICODE",
+//                 "_UNICODE"
+//             ],
+//             "cStandard": "c17",
+//             "cppStandard": "gnu++17",
+//             "intelliSenseMode": "windows-gcc-x64"
+//         }
+//     ],
+//     "version": 4
+// }
