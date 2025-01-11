@@ -318,7 +318,7 @@ class Bee {
             mt19937 gen(rd());
             uniform_int_distribution<> dist(0, numNodes - 1);
             int maxEdges = numNodes * (numNodes - 1) / 2; // Maximum number of edges in a directed acyclic graph
-            uniform_int_distribution<> edge_dist(0, maxEdges - 1);
+            uniform_int_distribution<> edge_dist(1, maxEdges - 1);
             maxEdges = edge_dist(gen);
             for (int i = 0; i < maxEdges; ++i) {
                 int parent = dist(gen);
@@ -420,13 +420,22 @@ using Solution = pair<Bee, DAG>;
 
 
 
+
 int probabilisticSelection(const vector<double>& scores) {
-    default_random_engine generator;
+    // Use a static generator to persist across function calls
+    static random_device rd;
+    static default_random_engine generator(rd());
+
     // Normalize probabilities based on scores
     double totalScore = accumulate(scores.begin(), scores.end(), 0.0);
     vector<double> probabilities;
     for (double score : scores) {
-        probabilities.push_back(score / totalScore);
+        double prob = 1 - (score / totalScore);
+        probabilities.push_back(prob);
+    }
+    double totalProb = accumulate(probabilities.begin(), probabilities.end(), 0.0);
+    for (double& prob : probabilities) {
+        prob /= totalProb;
     }
 
     // Generate cumulative distribution
@@ -436,11 +445,11 @@ int probabilisticSelection(const vector<double>& scores) {
     // Select a solution probabilistically
     uniform_real_distribution<double> distribution(0.0, 1.0);
     double randomValue = distribution(generator);
+
     auto it = lower_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), randomValue);
 
     return distance(cumulativeProbabilities.begin(), it);
 }
-
 
 
 
@@ -468,24 +477,25 @@ int main() {
         employedDAGs.push_back(dag);
         employedBees[i].performOperations(employedDAGs[i], data, numValues);
         solutions.push_back(make_pair(employedBees[i], employedDAGs[i]));
-
-        const auto& scores = solutions[i].first.getStoredScores();
-        for (size_t j = 0; j < scores.size(); ++j) {
-            cout << "Score for DAG " << i << ", Operation " << j << ": " << scores[j] << endl;
-        }
-
-        // Optionally display the best DAG for each bee
-        try {
-            solutions[i].second = solutions[i].first.getBestDAG();
-            cout << "Best DAG for Bee " << i << ":\n";
-            solutions[i].second.display();
-        } catch (const exception& e) {
-            cerr << "Error finding best DAG for Bee " << i << ": " << e.what() << endl;
-        }
+        employedScores.push_back(employedBees[i].getBestScore());
     }
-    for (auto solution: solutions) {
-        cout << "Best score for bee: " << solution.first.getBestScore() << endl;
+    for (auto employedScore: employedScores) {
+        cout << "Best score for bee: " << employedScore << endl;
     }
-    
+    vector<int> selects;
+    for (int i=0; i<10; i++) {
+        selects.push_back(0);
+    }
+    for(int i=0; i<100000; i++) {
+        int selectedBee = probabilisticSelection(employedScores);
+        selects[selectedBee] += 1;
+        // cout << "Selected bee: " << selectedBee << endl;
+    }
+    for (int i=0; i<10; i++) {
+        cout << "Selected frequency of: " << i << " is: " << selects[i] << endl;
+    }
+    // Pause before exiting
+    cout << "Press Enter to exit..." << std::endl;
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Wait for Enter
     return 0;
 }
